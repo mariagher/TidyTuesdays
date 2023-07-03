@@ -1,0 +1,111 @@
+
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(tidyr)
+library(tidytuesdayR)
+library(ggrepel)
+library(ggtext)
+```
+
+
+```{r}
+tuesdata <- tidytuesdayR::tt_load('2023-07-04')
+historical_markers <- tuesdata$`historical_markers`
+```
+
+
+```{r}
+data <- historical_markers %>%
+  select(title, latitude_minus_s, longitude_minus_w, state_or_prov, year_erected) %>%
+  group_by(state_or_prov) %>%
+  mutate(num_mercadillos = n()) %>%
+  mutate(categ = ifelse(num_mercadillos < 100, 1,
+                        ifelse(num_mercadillos >= 100 & num_mercadillos < 500, 2,
+                        ifelse(num_mercadillos >= 500 & num_mercadillos < 1000, 3,
+                        ifelse(num_mercadillos >= 1000 & num_mercadillos < 4000, 4, 5))))) %>%
+  ungroup() %>%
+  filter(state_or_prov != "Alaska", state_or_prov != "Puerto Rico", state_or_prov != "Hawaii")
+```
+
+
+```{r}
+oldest_market_per_state <- data %>%
+  group_by(state_or_prov) %>%
+  filter(year_erected == min(year_erected, na.rm = TRUE)) %>%
+  ungroup()
+
+# Para obtener los 5 mercados más antiguos en general
+top_5_oldest_market <- oldest_market_per_state %>%
+  arrange(year_erected) %>%
+  slice_head(n = 5)
+```
+
+
+```{r}
+# Convierte las columnas de latitud y longitud en numéricas
+data$lat <- as.numeric(data$latitude_minus_s)
+data$lon <- as.numeric(data$longitude_minus_w)
+```
+
+
+```{r}
+#Base del mapa de EEUU!
+us_map <- map_data("state")
+```
+
+
+```{r}
+plot <- ggplot() +
+  
+  geom_polygon(data = us_map, aes(x = long, y = lat, group = group), 
+               fill = "#ffefd3", color = "#ffefd3") +
+  geom_point(data = data, aes(x = longitude_minus_w, y = latitude_minus_s, color = factor(categ)), 
+             size = 0.8, alpha=0.5) +
+  geom_point(data = top_5_oldest_market, aes(x = longitude_minus_w, y = latitude_minus_s), 
+             size = 9, shape = 1, color = "black") +
+  geom_point(data = top_5_oldest_market, aes(x = longitude_minus_w, y = latitude_minus_s), 
+             size = 6, color = "white") +
+  
+  scale_color_manual(values = c("1" = "#941f1f", 
+                                "2" = "#ce6b5d", 
+                                "3" = "#ffab03", 
+                                "4" = "#7b9971", 
+                                "5" = "#34502b"),
+                     labels = c("Less than 100", "Between 100 & 500", "Between 500 & 1000", 
+                                "Between 1000 & 4000", "More than 4000")) +
+  coord_fixed(1.3) +
+  labs(color="", 
+       title = "A Tale of Two Extremes:\nHistorical Marketplaces in the US", 
+       subtitle = "This map presents a visualization of the distribution of historical marketplaces across the United States.\nThe color-coded points represent the number of historical marketplaces in each state, revealing a\nwide disparity. While Texas, Georgia, and Virginia stand out with the highest number of marketplaces,\nhosting over 3.000 each and with Texas leading at over 10.000, other states such as Vermont, Wyoming,\nand Montana have fewer than 100. Additionally, the map highlights the locations of the five oldest historical markets,\nwhich are found in North Carolina (1852), California (1862), Minnesota (1873), New York (1883), and Texas (1885)\n\nThe disparity is so pronounced that one can almost discern the\nstate boundaries based solely on the concentration of these historical marketplaces!", 
+       caption = "@elirmaraia / Source: Historical Markets Database USA Index / TidyTuesday 04.07") +
+  guides(color = guide_legend(override.aes = list(size = 7, 
+                                                  alpha = 1))) +
+  
+  theme_void() +
+  theme(legend.position="left",
+        legend.text = element_text(size=18, 
+                                   family = "Mukta"),
+        plot.subtitle = element_text(size=17, 
+                                     color = "#4e2d28", 
+                                     family = "Mukta", 
+                                     hjust = 0.5),
+        plot.title = element_text(family = "Great Vibes", 
+                                  size = 39,
+                                  color = "#941f1f",
+                                  hjust=0.5), 
+        plot.caption = element_text(family = "Mukta", 
+                                  size = 10,
+                                  color = "#680a1d",
+                                  hjust=0.5), 
+        plot.margin = margin(t = 5, r = 0, b = 25, l = 0, "mm")) 
+```
+
+```{r}
+ggsave(file = "historical_marketplaces.png", plot=plot, bg="#fffee4", width = 16, height = 11)
+```
+
+
